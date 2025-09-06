@@ -19,22 +19,28 @@ history:
 07-12-2025  For canvas option, can now resize window before displaying images.
 07-14-2025  Add type-hints to funcions. Remove show() method.
 08-11-2025  For canvas method, add Entry to display image number and filename.
+08-23-2025  Split canvas method into 1) load images, 2) create on canvas.
+            Change images by setting canvas.image.
+08-26-2025  Debug pause_show and resume_show. Add to plot method: display of
+            filename in title, and in canvas. Rename fxn but_reset_size
+            to window_reset.
+08-30-2025  Debug pause_show to delete previous image.
 """
 """
 TODO:
     1. If window is dragged larger, then image is displayed, then reset button is clicked,
        image is not resized. This requires delete() followed by re-display. Need to get
        which image it is...
-    2. Debug reset_window_size() to handle a window that has been re-sized
-       (currently the total_ht and total_wd don't include the whole ui).
-    3. Consider always using the matplotlib method. The main window would
-       be reserved for housekeeping (image lists & info, slideshow lists, etc.)
-       Main window could also be made minimal, and expand if more info is needed.
+    2. ? Always use the matplotlib method. Resserve the main window for 
+       housekeeping (image lists & info, slideshow lists, etc.)
+       Main window could also be minimal, and expand if more info is needed.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
 from importlib.machinery import SourceFileLoader
 import time
+import tkinter.font as tkfont
+import resource
 
 from ttkthemes import ThemedTk
 from PIL import Image, ImageTk
@@ -52,6 +58,16 @@ root.title("canvas, ttk, pack")
 # plot   = matplotlib.show
 display_method = "canvas"
 pause_time = 3
+# font_hu = tkfont.Font(family='Helvetica', size=14, weight='bold', underline=1)
+helv12 = tkfont.Font(family='Helvetica', size=12)
+helv12b = tkfont.Font(family='Helvetica', size=12, weight='bold')
+
+def using(point=""):
+    usage=resource.getrusage(resource.RUSAGE_SELF)
+    return '''%s: usertime=%s systime=%s mem=%s mb
+           '''%(point,usage[0],usage[1],
+                usage[2]/1024.0 )
+
 
 # def reset_window_size(canv: object, dims: str, vp) -> None:
 def reset_window_size(canv: object, vp) -> None:
@@ -66,58 +82,110 @@ def reset_window_size(canv: object, vp) -> None:
     canv.configure(width=vp['w'], height=vp['h'])
 
 
-def open_image_file(canv: object):
-    file_path = filedialog.askopenfilenames(title="Select Image File",
-                                           initialdir="images",
-                                           filetypes=[("Png files", "*.png"),
-                                                      ("Jpeg files", "jpg"),
-                                                      ("All files", "*.*")]
-                                           )
-    if file_path:
-        add_image(canv, file_path)
+def select_image_file(canv: object):
+    # global but_reset_size
+
+    if run_status is True:
+        file_path = filedialog.askopenfilenames(title="Select Image File",
+                                                initialdir="images",
+                                                filetypes=[("Png files", "*.png"),
+                                                           ("Jpeg files", "jpg"),
+                                                           ("All files", "*.*")]
+                                                )
+        if file_path:
+            add_image(canv, file_path)
+        window_reset.focus_set()
 
 
-def use_canvas(canv: object, fpath: tuple | str):
-    """Uses these variables from the module scope:
-
-        pause_time
-        textvar
-    """
+def use_canvas(canv: object,
+               fpath: tuple | str,
+               startnum: int=0) -> None:
+    # new module variables
     # if the last image should persist, enable this line:
     global im_tk
 
+    # existing module variables
+    global image_objects
+    global image_opened
+
+    image_objects = []
     if isinstance(fpath, str):
         fpath = (fpath, )
 
     for n, item in enumerate(fpath):
+        # if run_status is True:
+            try:
+                with Image.open(item) as im:
+                    imsize = cnv_ui.init_image_size(im, viewport)
+                    im_resize = im.resize((imsize['w'], imsize['h']))
 
-        try:
-            with Image.open(item) as im:
-                imsize = cnv_ui.init_image_size(im, viewport)
-                im_resize = im.resize((imsize['w'], imsize['h']))
-                im_tk = ImageTk.PhotoImage(im_resize)
+                    im_tk = ImageTk.PhotoImage(im_resize)
+                    image_objects.append(im_tk)
+                    images_opened.append(im.filename)
 
-                centered_x = (viewport['w'] - imsize['w']) / 2
-                centered_y = (viewport['h'] - imsize['h']) / 2
-                canv.create_image(centered_x, centered_y, anchor=tk.NW, image=im_tk, tag='image')
+                    # print(f'added {im.filename} to images_opened')
+                    # test
+                    # print(f'{canv.itemcget('image', 'image')=}')
+            except Exception as e:
+                print(f'error opening image: {str(e)}')
 
-                # test
-                # print(f'{canv.itemcget('image', 'image')=}')
+    # print(f'{images_opened=}')
+    # print(f'{fpath=}')
 
-                fname = item.split('/')[-1]
-                lab = str(n+1) + ' of ' + str(len(fpath)) + ': ' + fname
-                textvar.set(lab)
-                canv.update()
-                # ? get size here
+    display_to_canvas(canv, fpath, startnum)
 
+
+def display_to_canvas(canv, pathlist, startnum):
+    """Uses these variables from the module scope
+    (should we pass them in?):
+
+        pause_time
+        textvar
+        images_selected
+    """
+    global image_objects
+    global images_opened
+    global run_status
+    allids = None
+
+    for n, item in enumerate(image_objects[startnum:]):#, startnum):
+        centered_x = viewport['w'] / 2
+        centered_y = viewport['h'] / 2
+
+        if run_status is True:
+            imid = canv.create_image(centered_x, centered_y, image=item, tag='image')#, state=tk.HIDDEN)
+            print(f'creating {imid=}')
+            fname = images_opened[n].split('/')[-1]
+            images_selected.append(fname)
+            lab = str(n + 1) + ' of ' + str(len(pathlist)) + ': ' + fname
+            textvar.set(lab)
+
+        # if run_status is True:
+            allids = canv.find_all()
+            print(f'{allids=}')
+            # for n, i in enumerate(allids[:-1]):
+            #     print(f'deleting: {allids[n]}')
+            #     canv.delete(allids[n])
+
+            canv.update()
             time.sleep(pause_time)
-            canv.delete(n)
-        except Exception as e:
-            print(f'error opening image: {str(e)}')
+            canv.itemconfigure(allids[n], state=tk.HIDDEN)
+
+        else:
+            print(f'else: {run_status}')
+            break
+
+    # unhide the last image
+    canv.itemconfigure(allids[-1], state=tk.NORMAL)
 
 
-def use_plot(path: tuple | str):
+def use_plot(fpath: tuple | str):
     """Display a sequence of images using matplotlib.
+
+    Uses the module variables:
+        canv_1
+        helv12
+        helv12b
 
     Notes:
         1. The isinstance test is only needed if path is passed in as a string.
@@ -128,33 +196,98 @@ def use_plot(path: tuple | str):
         4. This method is probably the easier way to have more than one
            independent slideshow (using different figures).
     """
-    if isinstance(path, str):
-        print('converting path string to tuple...')
-        path = (path, )
+    global image_objects
+    global images_opened
+    global lens_image_objects
+    global run_status
 
+    if isinstance(fpath, str):
+        print('converting path string to tuple...')
+        fpath = (fpath,)
+
+    # debug
     # nums = plt.get_fignums()    # list
     # print(f'starting {nums=}')   # empty list, if none
 
-    # with no figure number specified (the 1 in this case), a new
-    # figure is automatically created. using an explicit number
-    # enables us to return to that figure later.
+    # Using an explicit number (the 1 in this case), enables us to return to
+    # that figure later.
     # fig = plt.figure(1, figsize=[9.6, 5.0], clear=True)
-    fig = plt.figure(figsize=[9.6, 5.0], clear=True)
-    # print(f'{fig.number=}')
-    nums2 = plt.get_fignums()    # list
-    print(f'final {nums2=}')
 
-    for n, item in enumerate(path):
+    # With no figure number specified, a new figure is automatically created.
+    fig = plt.figure(figsize=[9.6, 5.0], clear=True)
+
+    fig_nums = plt.get_fignums()    # list
+    h_offset = 6
+    v_offset = 6
+    v_line = 18
+    fig_offset = v_line * 2
+    if len(lens_image_objects) > 0:
+        figure_offset = (sum(lens_image_objects) * v_line) + (fig_offset)
+    else:
+        # zero (first line)
+        figure_offset = sum(lens_image_objects)
+
+    # canv_1.delete('file_list')
+
+    # heading for the list
+    figure_text = 'Figure ' + str(fig_nums[-1])
+    canv_1.create_text(h_offset, v_offset + figure_offset, text=figure_text, font=helv12b, anchor='nw', tag='file_list')
+
+    for n, item in enumerate(fpath):
+        # if run_status is True:
         try:
             im = Image.open(item)
-            plt.clf()
-            plt.imshow(im)
-            plt.axis("off")
-            plt.title('image ' + str(n+1))
-            fig.canvas.toolbar.pack_forget()
-            plt.pause(3)
+            images_opened.append(item)
+            image_objects.append(im)
+            # plt.clf()
+            # plt.imshow(im)
+            # plt.axis("off")
+            # filename = item.split('/')[-1]
+            #
+            # item_text = str(n+1) + ': ' + filename
+            # text_x = h_offset
+            # text_y = n * v_line + v_line + (v_offset * 2) + figure_offset
+            # canv_1.create_text(text_x, text_y, text=item_text, font=helv12, anchor='nw', tag='file_list')
+            #
+            # plt.title('image ' + item_text)
+            # # fig.canvas.toolbar.pack_forget()
+            # plt.pause(3)
         except Exception as e:
             print(f'error opening image: {str(e)}')
+
+        # update spacing for next list, if any
+        lens_image_objects.append(len(item))
+
+    display_to_plot(fpath, 0)
+
+
+def display_to_plot(pathlist, startnum=0):
+    global image_objects
+    global images_opened
+    global run_status
+
+    # temp
+    h_offset = 6
+    v_offset = 6
+    v_line = 18
+    figure_offset = 0
+
+    for n, item in enumerate(image_objects[startnum:], startnum):
+        if run_status is True:
+            plt.clf()
+            plt.imshow(item)
+            plt.axis("off")
+            filename = images_opened[n].split('/')[-1]
+            images_selected.append(filename)
+
+            item_text = str(n + 1) + ': ' + filename
+            text_x = h_offset
+            text_y = n * v_line + v_line + (v_offset * 2) + figure_offset
+            canv_1.create_text(text_x, text_y, text=item_text, font=helv12, anchor='nw', tag='file_list')
+
+            plt.title('image ' + item_text)
+            # fig.canvas.toolbar.pack_forget()
+            plt.pause(3)
 
 
 def add_image(canv: object, fpath: tuple | str):
@@ -167,10 +300,44 @@ def add_image(canv: object, fpath: tuple | str):
             use_plot(fpath)
 
 
-def set_pause(var: tk.StringVar):
+def set_delay(var: tk.StringVar):
     global pause_time
 
     pause_time = int(var.get())
+
+
+def pause_show(ev):
+    """uses module objects:
+
+    images_opened, image_objects
+    """
+    global run_status
+
+    run_status = False
+    print(f'in pause_show')
+    print(f'    images shown: {len(images_selected)}, last: {images_selected[-1]}')
+    # files = [i.split('/')[-1] for i in images_opened]
+    # print(f'    {files=}')
+    # print(f'    {len(image_objects)=}')
+
+
+def resume_show(ev, canv):
+    global images_opened
+    global images_selected
+    global run_status
+    global display_method
+
+    run_status = True
+    print(f'in resume_show')
+    num = len(images_selected)
+    print(f'    next: {image_objects[num]} ({images_opened[num]})')
+
+    if display_method == 'canvas':
+        # remove any displayed images
+        canv.delete(num)
+        display_to_canvas(canv, tuple(images_opened), num)
+    else:
+        display_to_plot(tuple(images_opened), num)
 
 
 # default_dims = "400x523+16+18"
@@ -180,6 +347,18 @@ style2 = sttk.create_styles()
 
 viewport = {'w': 400, 'h': 300, 'gutter': 10}
 my_pady = 10
+run_status=True
+images_selected = []
+images_opened = []
+image_objects = []
+lens_image_objects = []
+# test resources
+print(using('before'))
+# END test
+wrk = ['waste'] * 1000000
+# test resources
+print(using('after'))
+# END test
 
 canv_1 = tk.Canvas(root,
                    width=viewport['w'],
@@ -189,6 +368,14 @@ canv_1 = tk.Canvas(root,
 canv_1.pack(fill='both', expand=True)
 canv_1.configure(width=viewport['w'], height=viewport['h'])
 canv_1.bind('<Configure>', lambda ev, vp=viewport: cnv_ui.resize_viewport(ev, vp))
+canv_1.master.bind('<Control-Down>',
+                   lambda ev: pause_show(ev)
+                   )
+canv_1.master.bind('<Control-Up>',
+                   lambda ev,
+                          canv=canv_1: resume_show(ev, canv)
+                   )
+
 # canv_1.update()
 # print(f'{canv_1.winfo_width()=}, {canv_1.winfo_height()=}')
 
@@ -197,27 +384,27 @@ caption = ttk.Entry(root, justify='center', textvariable=textvar)
 caption.pack(fill='x', expand=True)
 caption.update()
 
-open_button = ttk.Button(root, text="Open Files", command=lambda c=canv_1: open_image_file(c))
+open_button = ttk.Button(root, text="Open Files", command=lambda c=canv_1: select_image_file(c))
 open_button.pack(pady=my_pady)
 
 ui_fr = ttk.Frame(root, relief='groove', style='alt.TFrame')
 
-display_pause = tk.StringVar(value='3')
-enter_display_pause = sel.EntryFrame(ui_fr,
-                                     display_name='Pause',
-                                     name='pause',
-                                     posn=[0],
-                                     stick='w',
-                                     var=display_pause,
-                                     callb=lambda var=display_pause: set_pause(var)
-                                     )
+delay = tk.StringVar(value='3')
+enter_delay_time = sel.EntryFrame(ui_fr,
+                                  display_name='Pause',
+                                  name='pause',
+                                  posn=[0],
+                                  stick='w',
+                                  var=delay,
+                                  callb=lambda var=delay: set_delay(var)
+                                  )
 
-but_reset_size = ttk.Button(ui_fr, text="reset window size",
-                            command=lambda canv=canv_1,
+window_reset = ttk.Button(ui_fr, text="reset window size",
+                          command=lambda canv=canv_1,
                                            # dims=default_dims,
                                            vp=viewport: reset_window_size(canv, vp),
-                            style="MyButton1.TButton")
-but_reset_size.pack(padx=5, pady=my_pady)
+                          style="MyButton1.TButton")
+window_reset.pack(padx=5, pady=my_pady)
 
 ui_fr.pack(side='top', ipadx=5, ipady=5, padx=5, pady=5)
 ui_fr.update()
@@ -246,7 +433,7 @@ default_dims = root.geometry()
 
 # root.minsize(total_wd, total_ht)
 root.minsize(400, 474)
-print(f'{root.geometry()=}')
+# print(f'{root.geometry()=}')
 
 if __name__ == "__main__":
     root.mainloop()
