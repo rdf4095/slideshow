@@ -32,13 +32,16 @@ history:
 09-11-2025  Pause/resume works correctly in plot method.
 09-12-2025  Image lists for more than one figure works correctly in plot method.
 09-22-2025  Debug canvas method for more than one slideshow.
+09-27-2025  Update type hinting for consistency. Remove some old comments.
+09-30-2025  Don't resize the plot window in reset_window_size().
 """
 """
 TODO:
-    1. For canvas method: if window is dragged larger, then image is displayed, then reset button is clicked,
+    1. For plot method: instead of displaying image names using Frame/list of Labels,
+       consider using Frame/Canvas with create_text.
+    2. For canvas method: if window is dragged larger, then image is displayed, then reset button is clicked,
        image is not resized. This requires delete() followed by re-display. Need to get
-       which image it is...This does not apply to the plot method.
-    2. For plot method: ? window reset button must be programmed to reset the window.
+       which image it is.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -72,36 +75,23 @@ helv12 = tkfont.Font(family='Helvetica', size=12)
 helv12b = tkfont.Font(family='Helvetica', size=12, weight='bold')
 
 
-def reset_window_size(canv: object, vp) -> None:
+def reset_window_size(canv: object, vp: dict) -> None:
     """Reset the app main window to the global default_dims size."""
-    root.geometry(default_dims)
-
-    canv.configure(width=400, height=300)
-    vp['w'] = 400
-    vp['h'] = 300
-
-    canv.configure(width=vp['w'], height=vp['h'])
-
     if display_method == "plot":
-        # works
+        # This won't restore the size if the window has been manually
+        #  dragged to a new size.
+
+        # an example of setting a size, or selecting a size from a list
         # fig = plt.gcf()
+        # fig.set_size_inches(10.6 ,6.0, forward=True)
+        pass
+    else:
+        # TODO: account for the changing size of the image list Frame
+        root.geometry(default_dims)
 
-        # show the default window size
-        # print(f'{fig=}')
-
-        # This works to set the size, but won't restore the size if the window
-        # has been manually dragged to a new size.
-        # So, it's of no use to "reset" the window, but could be used
-        # to *set* a size, or select a size from a list...
-
-        # Also, don't do this after pausing a show; the previous images
-        # will show through on the same figure.
-
-        # works with gcf aoove
-        # fig.set_size_inches(9.6 ,5.0, forward=True)
-
-        plt.close()
-        fig = plt.figure(figsize=[9.6, 5.0], clear=True)
+        canv.configure(width=400, height=300)
+        vp['w'] = 400
+        vp['h'] = 300
 
 
 def select_image_file(canv: object) -> None:
@@ -121,12 +111,16 @@ def use_canvas(canv: object,
                fpath: tuple | str,
                startnum: int=0
                ) -> None:
-    """Use Canvas to display images. Create a PIL PhotoImage for each file
-    in a list of paths. Call other functions to handle actual display.
+    """Display a sequence of images using tk.Canvas.
+    Create a PIL PhotoImage for each file in a list of paths.
 
     Uses module variables:
         image_objects
         images_opened
+
+    Calls:
+        prep_canvas
+        display_to_canvas
     """
     # if the last image should persist, enable this line:
     global im_tk
@@ -147,6 +141,8 @@ def use_canvas(canv: object,
                     im_tk = ImageTk.PhotoImage(im_resize)
                     image_objects.append(im_tk)
                     images_opened.append(im.filename)
+                    # or, for consistency, do it like use_plot:
+                    # images_opened.append(item)
 
                     # print(f'{canv.itemcget('image', 'image')=}')
             except Exception as e:
@@ -157,13 +153,17 @@ def use_canvas(canv: object,
     display_to_canvas(canv, fpath, startnum)
 
 
-def prep_canvas(canv, startnum):
+def prep_canvas(canv: object, startnum: int) -> None:
     """Prepare the Canvas for image display by creating the list of objects.
     Uses these module variables:
         image_objects
         images_opened
         images_selected
     """
+    print('in prep_canvas')
+    print(f'    {viewport['w']=}, {viewport['h']=}')
+    print(f'    {canv_1.winfo_width()=}, {canv_1.winfo_height()=}')
+
     # delete any existing images
     idlist = canv.find_all()
     for n, item in enumerate(idlist):
@@ -178,7 +178,10 @@ def prep_canvas(canv, startnum):
         images_selected.append(fname)
 
 
-def display_to_canvas_ORIG(canv, pathlist, startnum):
+def display_to_canvas_ORIG(canv: object,
+                           pathlist: list,
+                           startnum: int
+                           ) -> None:
     """Display a list of images to a Canvas, one at a time.
 
     Uses these module variables:
@@ -192,9 +195,10 @@ def display_to_canvas_ORIG(canv, pathlist, startnum):
         if run_status is True:
             idlist = canv.find_all()
             canv.itemconfigure(idlist[n], state=tk.NORMAL)
-            # try/except not needed because when n==0, idlist[-1] acts on the
-            # last item in the list, which isn't needed but does no harm.
 
+            # a list of 1 item is a special case. When n==0,
+            # idlist[-1] acts on the last item in the list, which is
+            # the only item, so the item becomes hidden.
             if len(idlist) > 1:
                 canv.itemconfigure(idlist[n-1], state=tk.HIDDEN)
 
@@ -208,7 +212,10 @@ def display_to_canvas_ORIG(canv, pathlist, startnum):
             break
 
 
-def display_to_canvas(canv, pathlist, startnum):
+def display_to_canvas(canv: object,
+                      pathlist: list,
+                      startnum: int
+                      ) -> None:
     """Display a list of images to a Canvas, one at a time.
 
     Uses these module variables:
@@ -238,10 +245,7 @@ def display_to_canvas(canv, pathlist, startnum):
             if run_status is True:
                 # idlist = canv.find_all()
                 canv.itemconfigure(idlist[n], state=tk.NORMAL)
-                # try/except not needed because when n==0, idlist[-1] acts on the
-                # last item in the list, which isn't needed but does no harm.
 
-                # if len(idlist) > 1:
                 canv.itemconfigure(idlist[n-1], state=tk.HIDDEN)
 
                 fname = images_selected[n]
@@ -254,10 +258,10 @@ def display_to_canvas(canv, pathlist, startnum):
                 break
 
 
-def use_plot(fpath: tuple | str):
+def use_plot(fpath: tuple | str) -> None:
     """Display a sequence of images using matplotlib.
 
-    Uses the module variables:
+    Uses module variables:
         canv_1
         helv12
         helv12b
@@ -268,14 +272,14 @@ def use_plot(fpath: tuple | str):
         2. The figure object is only needed to suppress the window UI widgets
            using pack_forget().
         3. This method does not support the 'with' context manager for reading files.
-        4. This method is probably the easier way to have more than one
-           independent slideshow (using different figures).
+        4. This method is easier for +1 independent slideshow (using different figures).
     """
     global image_objects
     global images_opened
     global lens_image_objects
     global run_status
 
+    # re-init globals
     image_objects = []
     images_opened = []
 
@@ -295,55 +299,22 @@ def use_plot(fpath: tuple | str):
     fig.canvas.mpl_connect('close_event', on_close)
 
     # existing_figs = plt.get_fignums()    # list
-    h_offset = 6
-    v_offset = 6
-    # line_height = 12
     line_height = 18
     fig_offset = line_height * 2
-    list_offset = 0
 
-    # print(f'{existing_figs=}')
-    # print(f'{line_height=}, {fig_offset=}')
-
-    # if len(lens_image_objects) > 0:
-    #     # list_offset = (len(lens_image_objects) * line_height) + fig_offset
-    #     # figs = len(existing_figs)
-    #     # if len(existing_figs) > 1:
-    #     #     figs = (len(existing_figs) - 1)
-    #     # else:
-    #     #     figs = len(existing_figs)
-    #
-    #     factor = len(existing_figs) * fig_offset
-    #
-    #     # print(f'{line_height=}, {figs=}')
-    #     # list_offset = (len(lens_image_objects) * (line_height * figs))# + fig_offset
-    #     list_offset = (len(lens_image_objects) * line_height) + factor
-    #     print(f'    {factor=}, {list_offset=}')
-    # if len(lens_image_objects) > 0:
-
-    # factor = (len(existing_figs) - 1) * fig_offset
     factor = len(existing_figs) * fig_offset
     list_offset = (len(lens_image_objects) * line_height) + factor
-    # print(f'    {factor=}, {list_offset=}')
-
-
-    # else:
-    #     # zero (first line)
-    #     list_offset = len(lens_image_objects)
-
-    # If the figure no longer exists (window was closed), delete its list.
-    # This should be done in a function.
-    # canv_1.delete('file_list')
 
     # Display a title for the list
     figures = plt.get_fignums()
     figure_text = 'Figure ' + str(figures[-1])
-    # canv_1.create_text(h_offset, v_offset + list_offset, text=figure_text, font=helv12b, anchor='nw', tags='list_title')
 
     figure_fr = add_text_frame(figure_text)
 
+    print(f'{figure_fr.__class__=}')
+
     for n, item in enumerate(fpath):
-        # ? need this
+        # ? need this 'if'
         # if run_status is True:
         try:
             im = Image.open(item)
@@ -358,7 +329,9 @@ def use_plot(fpath: tuple | str):
     display_to_plot(list_offset, figure_fr, 0)
 
 
-def display_to_plot(list_offset, fr, startnum=0):
+def display_to_plot(list_offset: int,
+                    fr: object,
+                    startnum=0) -> None:
     global image_objects
     global images_opened
     global run_status
@@ -368,10 +341,10 @@ def display_to_plot(list_offset, fr, startnum=0):
     line_height = 18
 
     # has no effect:
-    # canv_1.master.focus_set()
+    canv_1.master.focus_set()
 
+    print(f'{len(image_objects)=}, {len(images_opened)=}')
     for n, item in enumerate(image_objects[startnum:], startnum):
-        # print(f'{n=}, {run_status=}')
         if run_status is True:
             plt.clf()
             # imshow creates the matplotlib Artist "AxesImage" in the container "ax.images"
@@ -384,7 +357,6 @@ def display_to_plot(list_offset, fr, startnum=0):
             item_text = str(n + 1) + ': ' + filename
             text_x = h_offset
             text_y = (n * line_height) + line_height + (v_offset * 2) + list_offset
-            # canv_1.create_text(text_x, text_y, text=item_text, font=helv12, anchor='nw', tags='file_list')
             add_text(fr, item_text)
 
             plt.title('image ' + item_text)
@@ -412,7 +384,7 @@ def add_text(parent: object, line: str) -> None:
     lin.pack(anchor='w', fill='both')
 
 
-def add_image(canv: object, fpath: tuple | str):
+def add_image(canv: object, fpath: tuple | str) -> None:
     global display_method
 
     match display_method:
@@ -422,7 +394,7 @@ def add_image(canv: object, fpath: tuple | str):
             use_plot(fpath)
 
 
-def set_delay(var: tk.StringVar):
+def set_delay(var: tk.StringVar) -> None:
     global delay_time
 
     delay_time = int(var.get())
@@ -443,7 +415,7 @@ def pause_show(ev):
     # print(f'    {len(image_objects)=}')
 
 
-def resume_show(ev, canv):
+def resume_show(ev, canv: object) -> None:
     global images_opened
     global images_selected
     global run_status
@@ -461,17 +433,24 @@ def resume_show(ev, canv):
                 thisnum = n + 1
         else:
             pass
-        # print(f'{thisnum=}')
         display_to_canvas(canv, tuple(images_opened), thisnum)
     else:
+        # get the most recent Frame
+        children = root.winfo_children()
+        frames = [i for i in children if i.__class__ == ttk.Frame]
+
+        # resume the display
         thisnum = len(images_selected)
-        print(f'{thisnum=}')
-        display_to_plot(tuple(images_opened), thisnum)
+
+        # display_to_plot(tuple(images_opened), frames[-1], thisnum)
+        # TODO: test the frames[-2] when there is more than one plot window
+        display_to_plot(0, frames[-2], thisnum)
 
 
 def step_forward():
+    """Display the next image in the current show list"""
+    # if run_status:
     if run_status == False:
-        # display the next image in the current show list
         if display_method == 'canvas':
             pass
         else:
@@ -479,8 +458,9 @@ def step_forward():
 
 
 def step_back():
+    """Display the previous image in current show list."""
+    # if run_status:
     if run_status == False:
-        # display the previous image in current show list
         if display_method == 'canvas':
             pass
         else:
@@ -499,7 +479,6 @@ def on_close(ev):
 
 
 # default_dims = "400x523+16+18"
-
 default_dims = ""
 style2 = sttk.create_styles()
 
