@@ -1,10 +1,12 @@
 """
-program: main_0.py
+program: slides_canvas.py
 
 purpose: Main routine for project slideshow.
 
 comments: Demonstrates several different approaches for displaying one or
           more images in succession.
+
+          No Artificial Intelligence was used in production of this code.
 
 author: Russell Folks
 
@@ -34,12 +36,12 @@ history:
 09-22-2025  Debug canvas method for more than one slideshow.
 09-27-2025  Update type hinting for consistency. Remove some old comments.
 09-30-2025  Don't resize the plot window in reset_window_size().
+10-01-2025  For plot method, display image list in a tool_classes/CanvasFrame.
+10-04-2025  Debug resume_show for plot method that uses a Canvas for the list.
 """
 """
 TODO:
-    1. For plot method: instead of displaying image names using Frame/list of Labels,
-       consider using Frame/Canvas with create_text.
-    2. For canvas method: if window is dragged larger, then image is displayed, then reset button is clicked,
+    1. For canvas method: if window is dragged larger, then image is displayed, then reset button is clicked,
        image is not resized. This requires delete() followed by re-display. Need to get
        which image it is.
 """
@@ -74,6 +76,11 @@ delay_time = 3
 helv12 = tkfont.Font(family='Helvetica', size=12)
 helv12b = tkfont.Font(family='Helvetica', size=12, weight='bold')
 
+# test
+canv_config_flag = False
+enter_win_flag = False
+leave_win_flag = False
+# END test
 
 def reset_window_size(canv: object, vp: dict) -> None:
     """Reset the app main window to the global default_dims size."""
@@ -139,6 +146,7 @@ def use_canvas(canv: object,
                     im_resize = im.resize((imsize['w'], imsize['h']))
 
                     im_tk = ImageTk.PhotoImage(im_resize)
+
                     image_objects.append(im_tk)
                     images_opened.append(im.filename)
                     # or, for consistency, do it like use_plot:
@@ -160,9 +168,9 @@ def prep_canvas(canv: object, startnum: int) -> None:
         images_opened
         images_selected
     """
-    print('in prep_canvas')
-    print(f'    {viewport['w']=}, {viewport['h']=}')
-    print(f'    {canv_1.winfo_width()=}, {canv_1.winfo_height()=}')
+    # print('in prep_canvas')
+    # print(f'    {viewport['w']=}, {viewport['h']=}')
+    # print(f'    {canv_1.winfo_width()=}, {canv_1.winfo_height()=}')
 
     # delete any existing images
     idlist = canv.find_all()
@@ -309,9 +317,28 @@ def use_plot(fpath: tuple | str) -> None:
     figures = plt.get_fignums()
     figure_text = 'Figure ' + str(figures[-1])
 
-    figure_fr = add_text_frame(figure_text)
+    # figure_fr = add_text_frame(figure_text)
+    nam = 'list' + str(figures[-1])
+    disp_nam = 'list ' + str(figures[-1])
 
-    print(f'{figure_fr.__class__=}')
+    # TODO: update posn for each show's CanvasFrame
+
+    figure_fr = sel.CanvasFrame(report,
+                                name=nam,
+                                posn=[0, 0],
+                                display_name=disp_nam,
+                                stick='w')
+
+
+    # print(f'{figure_fr.__class__=}')
+
+    # print(f'{figure_fr.winfo_children()}')
+    # for attribute, value in figure_fr.__dict__.items():
+    #     print(f'    {attribute}, {value}')
+
+    # print(f'{figure_fr.__dict__["children"]}')
+    # print(f'{figure_fr.__dict__["children"]["list1_canvas"]}')
+
 
     for n, item in enumerate(fpath):
         # ? need this 'if'
@@ -343,7 +370,7 @@ def display_to_plot(list_offset: int,
     # has no effect:
     canv_1.master.focus_set()
 
-    print(f'{len(image_objects)=}, {len(images_opened)=}')
+    # print(f'{len(image_objects)=}, {len(images_opened)=}')
     for n, item in enumerate(image_objects[startnum:], startnum):
         if run_status is True:
             plt.clf()
@@ -356,8 +383,22 @@ def display_to_plot(list_offset: int,
 
             item_text = str(n + 1) + ': ' + filename
             text_x = h_offset
-            text_y = (n * line_height) + line_height + (v_offset * 2) + list_offset
-            add_text(fr, item_text)
+            # text_y = (n * line_height) + line_height + (v_offset * 2) + list_offset
+            text_y = (n * line_height) + (v_offset * 2) + list_offset
+            # print(f'{n * line_height=}')
+            # print(f'{v_offset * 2=}')
+            # print(f'{list_offset=}')
+
+            figures = plt.get_fignums()
+            thisname = 'list' + str(figures[-1]) + '_canvas'
+
+            # print('display_to_plot:')
+            # print(f'    {fr=}, {type(fr)=}')
+            # print(f'    {thisname=}')
+            cnv = fr.__dict__["children"][thisname]
+
+            add_text(cnv, item_text, (text_x, text_y))
+            # print(f'{fr.__dict__["children"]["list1_canvas"]}')
 
             plt.title('image ' + item_text)
             # fig.canvas.toolbar.pack_forget()
@@ -369,19 +410,11 @@ def display_to_plot(list_offset: int,
             break
 
 
-def add_text_frame(line: str) -> object:
-    text_frame = ttk.Frame(report)
-    text_frame.pack(fill='both', expand=True)
-
-    lin = ttk.Label(text_frame, anchor='w', text=line, font=helv12b)
-    lin.pack(anchor='w', padx=3, pady=5)
-
-    return text_frame
-
-
-def add_text(parent: object, line: str) -> None:
-    lin = ttk.Label(parent, anchor='w', text=line, font=helv12)#, background='cyan')
-    lin.pack(anchor='w', fill='both')
+def add_text(container: object,
+             line: str,
+             xy: tuple) -> None:
+    container.create_text(xy[0], xy[1], anchor='w', font='helv12', text=line)
+    container.configure(scrollregion=container.bbox("all"))
 
 
 def add_image(canv: object, fpath: tuple | str) -> None:
@@ -408,8 +441,9 @@ def pause_show(ev):
     global run_status
 
     run_status = False
-    print(f'in pause_show')
-    print(f'    images shown: {len(images_selected)}, last: {images_selected[-1]}')
+    # print(f'in pause_show')
+    # print(f'    images shown: {len(images_selected)}, last: {images_selected[-1]}')
+
     # files = [i.split('/')[-1] for i in images_opened]
     # print(f'    {files=}')
     # print(f'    {len(image_objects)=}')
@@ -431,20 +465,24 @@ def resume_show(ev, canv: object) -> None:
         for n, item in enumerate(canv.find_all()):
             if canv.itemcget(item, "state") == "normal":
                 thisnum = n + 1
+                break    # only one is normal
         else:
             pass
+
+        # TODO: thisnum won't work if the show was paused on the last image (there is no n + 1)
         display_to_canvas(canv, tuple(images_opened), thisnum)
     else:
         # get the most recent Frame
         children = root.winfo_children()
         frames = [i for i in children if i.__class__ == ttk.Frame]
 
-        # resume the display
         thisnum = len(images_selected)
 
-        # display_to_plot(tuple(images_opened), frames[-1], thisnum)
-        # TODO: test the frames[-2] when there is more than one plot window
-        display_to_plot(0, frames[-2], thisnum)
+        cfr = frames[0].winfo_children()[-1]
+        # print('resume_show:')
+        # print(f'    {frames[0]=}, {type(frames[0])=}')
+        # print(f'    {cfr=}, {type(cfr)=}')
+        display_to_plot(0, cfr, thisnum)
 
 
 def step_forward():
@@ -477,6 +515,51 @@ def on_close(ev):
     pass
 
 
+# def resize_and_update(ev, vp, startnum):
+#     cnv_ui.resize_viewport(ev, vp)
+#
+#     if len(images_opened) == 0:
+#         return
+#     # TODO: works, but SLOW, and startnum must be determined (0 is just for testing)
+#     # ...need a way to wait until the window-drag is completed (L-mouse up)
+#     use_canvas(ev.widget, images_opened[0], startnum)
+
+
+def read_but1(ev, vp):
+    print(f'in read_but1: {ev}')
+    # cnv_ui.resize_viewport(ev, vp)
+    canv = ev.widget
+
+    if len(images_opened) == 0:
+        return
+    # ? slow
+    # ...proceed with setting startnum (the zero in this call)
+    thisnum = 0
+    for n, item in enumerate(canv.find_all()):
+        if canv.itemcget(item, "state") == "normal":
+            thisnum = n
+            break  # only one is normal
+
+    # try
+    im = Image.open(images_opened[-1])
+    params = cnv_ui.calc_resize_to_vp(viewport, im)
+    canv.configure(width=params['wid_int'], height=params['ht_int'])
+    canv.update()
+    # END try
+
+    # use_canvas(canv, tuple(images_opened), thisnum)
+
+
+def set_enter_win():
+    enter_win_flag = True
+    print(f'in set_enter_win:\n    {canv_config_flag=}, {enter_win_flag=}, {leave_win_flag=}')
+
+
+def set_leave_win():
+    leave_win_flag = True
+    print(f'in set_leave_win:\n    {canv_config_flag=}, {enter_win_flag=}, {leave_win_flag=}')
+
+
 
 # default_dims = "400x523+16+18"
 default_dims = ""
@@ -498,7 +581,20 @@ canv_1 = tk.Canvas(root,
 canv_1.pack(fill='both', expand=True)
 canv_1.configure(width=viewport['w'], height=viewport['h'])
 canv_1.bind('<Configure>', lambda ev,
-                                  vp=viewport: cnv_ui.resize_viewport(ev, vp))
+                                  vp=viewport,
+                                  f=canv_config_flag: cnv_ui.resize_viewport(ev, vp, f))
+
+canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
+
+# test
+canv_1.master.bind('Enter', set_enter_win)
+canv_1.master.bind('Leave', set_leave_win)
+# END test
+
+# ...have to do more than this
+# canv_1.bind('<Configure>', lambda ev,
+#                                   vp=viewport,
+#                                   startnum=0: resize_and_update(ev, vp, startnum))
 canv_1.master.bind('<Control-Down>',
                    lambda ev: pause_show(ev)
                    )
@@ -506,9 +602,11 @@ canv_1.master.bind('<Control-Up>',
                    lambda ev,
                           canv=canv_1: resume_show(ev, canv)
                    )
+# canv_1.create_text()
 
 report = ttk.Frame(root)
 report.pack(fill='both', expand=True)
+
 
 # canv_1.update()
 # print(f'{canv_1.winfo_width()=}, {canv_1.winfo_height()=}')
