@@ -18,6 +18,8 @@ history:
 04-04-2026  Disable code related to image display.
 04-09-2026  New approach to displaying image list: Frame/Label & Text.
             Still developing spacing of these Frames.
+04-13-2026  Debug the approach to displaying lists of files for each show.
+            Remove some old code: variables, tests and comments.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -26,7 +28,7 @@ import time
 import tkinter.font as tkfont
 
 from ttkthemes import ThemedTk
-from PIL import Image, ImageTk
+from PIL import Image
 import matplotlib.pyplot as plt
 # ? needed
 from matplotlib.pyplot import figure
@@ -88,15 +90,15 @@ def setup_plot(fpath: tuple | str) -> None:
     """
     global image_objects
     global images_opened
-    global lens_image_objects
+    # global lens_image_objects
     global run_status
     global canv_1
-    global previous_ht
 
     # re-init globals
     image_objects = []
     images_opened = []
 
+    # print('in setup_plot')
     if isinstance(fpath, str):
         print('converting path string to tuple...')
         fpath = (fpath,)
@@ -109,23 +111,17 @@ def setup_plot(fpath: tuple | str) -> None:
     # With no figure number specified, a new figure is automatically created.
     existing_figs = plt.get_fignums()    # list
     fig = plt.figure(figsize=[9.6, 5.0], clear=True)
+
+    # ? needed
     # fig.add_callback(on_close())
     fig.canvas.mpl_connect('close_event', on_close)
 
-    line_height = 18
-    fig_offset = line_height * 2
-
-    factor = len(existing_figs) * fig_offset
-    list_offset = (len(lens_image_objects) * line_height) + factor
-
-    # Display a title for the list
+    # Title for the list
     figures = plt.get_fignums()
     figure_text = 'Figure ' + str(figures[-1])
 
-    nam = 'list' + str(figures[-1])
-    disp_nam = 'list ' + str(figures[-1])
-
-    figure_row = len(existing_figs)
+    # nam = 'list' + str(figures[-1])
+    # disp_nam = 'list ' + str(figures[-1])
 
     for n, item in enumerate(fpath):
         try:
@@ -136,49 +132,60 @@ def setup_plot(fpath: tuple | str) -> None:
             print(f'error opening image: {str(e)}')
 
         # update spacing for next list, if any
-        lens_image_objects.append(len(item))
+        # lens_image_objects.append(len(item))
 
     # new
     num_to_show = len(images_opened)
-    calc_ht = (line_height * num_to_show) + 19    # 9 = pady + (linespacing = 2) * 2
-    fr = tk.Frame(canv_1, width=400, height=calc_ht)
-    list_label = tk.Label(fr, text=figure_text)
-    list_label.pack(anchor='w', pady=5)
-    list_label.update()
-    label_ht = list_label.winfo_height()
-    print(f'{label_ht=}')
-    calc_ht += (23 + 15)
-    previous_ht += (label_ht + 15)
-    # END new
 
-    display_to_plot(calc_ht, fr, 0)
+    # label_ht = 20    # arbitrary
+    # calc_ht = (line_height * num_to_show ) + label_ht
+
+    fr = tk.Frame(canv_1, width=400)#, height=calc_ht)
+    list_label = tk.Label(fr, text=figure_text, background='cyan')
+    list_label.pack(anchor='w')#, pady=5)
+
+    t1 = tk.Text(fr, height=num_to_show)#, pady=3)#spacing3=2)
+    t1.pack(anchor='w')#, expand=True)
+
+    # display_to_plot(calc_ht, fr, 0)
+    display_to_plot(fr, 0)
 
 
-def display_to_plot(list_offset: int,
-                    fr: object,
+# def display_to_plot(win_height: int,
+#                     fr: object,
+#                     startnum=0) -> None:
+def display_to_plot(fr: object,
                     startnum=0) -> None:
+
     global image_objects
     global images_opened
     global run_status
-    global previous_ht
 
-    h_offset = 6
-    v_offset = 6
-    line_height = 30    # 20 + linespacing=2 + linespacing=2
+    # h_offset = 6
+    # v_offset = 6
+    # line_height = 30    # 20 + linespacing=2 + linespacing=2
 
     print('in display_to_plot')
     root.focus()
 
-    t1 = tk.Text(fr, pady=5, spacing3=2)
-    t1.pack(anchor='w', pady=5)
-    text_win_ht = line_height * len(images_opened) + 5
-    # calc_ht = text_win_ht + v_offset
-    print(f'    {previous_ht=}')
-    print(f'    {text_win_ht=}')
-    print(f'    {list_offset=}')
-    textwin = canv_1.canv.create_window(200, previous_ht, anchor=tk.N, width=400, height=list_offset, window=fr)
+    # t1 = tk.Text(fr, spacing3=2)
+    # t1.pack(anchor='w')#, expand=True)
 
-    previous_ht = list_offset
+    # text_win_ht = line_height * len(images_opened) + 5
+
+    # calculate win y-position using the coords of the canvas-window obove.
+    win_y = 2
+    if len(canv_windows) > 0:
+        item = canv_windows[-1]
+        bbox = canv_1.canv.bbox(item)
+        print(f'    {bbox=}')
+        win_y = bbox[3] + 5
+
+    # thiswin = canv_1.canv.create_window(200, win_y, anchor=tk.N, width=400, height=win_height, window=fr)
+    # works best for sizing, if Frame size is correct
+    thiswin = canv_1.canv.create_window(200, win_y, anchor=tk.N, width=400, window=fr)
+    canv_windows.append(thiswin)
+    t1 = fr.winfo_children()[1]
 
     for n, item in enumerate(image_objects[startnum:], startnum):
         if run_status is True:
@@ -191,18 +198,8 @@ def display_to_plot(list_offset: int,
             images_selected.append(filename)
 
             item_text = str(n + 1) + ': ' + filename
-            text_x = h_offset
-            # text_y = (n * line_height) + line_height + (v_offset * 2) + list_offset
-            text_y = (n * line_height) + (v_offset * 2) + list_offset
-
             figures = plt.get_fignums()
             thisname = 'list' + str(figures[-1]) + '_canvas'
-
-            # cnv = fr.__dict__["children"][thisname]
-
-            # NOTE: should probably directly call create_text
-            # add_text(cnv, item_text, (text_x, text_y))
-            # container.create_text(xy[0], xy[1], anchor='w', font='helv12', text=item_text)
 
             t1.insert('end', item_text)
             # ? should not be necessary to insert a newline
@@ -212,17 +209,6 @@ def display_to_plot(list_offset: int,
             plt.pause(3)
         else:
             break
-
-
-# def add_text(container: object,
-#              line: str,
-#              xy: tuple) -> None:
-#     print('in add_text...')
-#     print(f'    in container: {container}')
-#     print(f'    writing text: {line}')
-#     print(f'    to: {xy}')
-#
-#     container.create_text(xy[0], xy[1], anchor='w', font='helv12', text=line)
 
 
 def set_delay(var: tk.StringVar) -> None:
@@ -339,12 +325,13 @@ style2 = sttk.create_styles()
 
 viewport = {'w': 400, 'h': 300, 'gutter': 10}
 my_pady = 10
-previous_ht = 0
+# previous_ht = 0
 run_status=True
 images_selected = []
 images_opened = []
 image_objects = []
-lens_image_objects = []
+# lens_image_objects = []
+canv_windows = []
 
 
 canv_1 = sel.CanvasFrame(root,
@@ -352,56 +339,10 @@ canv_1 = sel.CanvasFrame(root,
                          display_name='slideshows',
                          posn=[1],
                          stick='nsew')
-# test
-# ----
-# canvas = canv_1.winfo_children()[1]
 canvas = canv_1.canv
 
 # try, instead of canvas with windows/frames/text_objects
 # scr_win = ttk.PanedWindow()
-
-# begin test
-# ----------
-# lines = ['one', 'two', 'three', 'four', 'five', 'six', 'seven']
-# show1 = 4
-# calc_ht1 = (show1 * 19) + 5 + 2
-# fr1 = tk.Frame(canvas, width=400, height=calc_ht1)
-# # Text defaults to the width of the container
-# t1 = tk.Text(fr1, pady=5, spacing3=2)
-# for n, i in enumerate(lines[0:show1]):
-#     t1.insert('end', i)
-#     # ? should not be necessary to insert a newline
-#     t1.insert('end', '\n')
-# t1.pack(pady=5)
-# twin1 = canvas.create_window(200, 0, anchor=tk.N, width=400, height=calc_ht1, window=fr1)
-#
-# fr2 = tk.Frame(canvas, width=400, height=100)
-# t2 = tk.Text(fr2, pady=5, spacing3=2)
-# show2 = 5
-# calc_ht2 = (show2 * 19) + 5 + 2
-# for n, i in enumerate(lines[0:show2]):
-#     t2.insert('end', i)
-#     t2.insert('end', '\n')
-# t2.pack(pady=5)
-# twin2 = canvas.create_window(200, calc_ht1, anchor=tk.N, width=400, height=calc_ht2, window=fr2)
-#
-# fr3 = tk.Frame(canvas, width=400, height=100)
-# t3 = tk.Text(fr3, pady=5, spacing3=2)
-# show3 = 3
-# calc_ht3 = (show3 * 19) + 5 + 2
-# for n, i in enumerate(lines[0:show3]):
-#     t3.insert('end', i)
-#     t3.insert('end', '\n')
-# t3.pack(pady=5)
-# twin3 = canvas.create_window(200, calc_ht1 + calc_ht2, anchor=tk.N, width=400, height=calc_ht3, window=fr3)
-
-# END test
-
-
-
-# canv_1.bind('<Configure>', lambda ev,
-#                                   vp=viewport,
-#                                   f=canv_config_flag: cnv_ui.resize_viewport(ev, vp, f))
 
 canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
 
@@ -461,22 +402,20 @@ btnq = ttk.Button(root,
 btnq.pack(side="top", pady=my_pady)
 btnq.update()
 
-# begin test: show some layout dimensions
-# ----------
+total_ht = canv_1.winfo_height() + caption.winfo_height() + open_button.winfo_height() + ui_fr.winfo_height() + btnq.winfo_height()
+total_wd = max(canv_1.winfo_width(), ui_fr.winfo_width())
+
+# begin test: show some layout dimensions ----------
 # print(f'canv_static1 h,w: {canv_static1.winfo_height()}, {canv_static1.winfo_width()}')
 # print(f'ui_fr h,w: {ui_fr.winfo_height()}, {ui_fr.winfo_width()}')
 # print(f'lab h,w: {lab.winfo_height()}, {lab.winfo_width()}')
 
-# update widget sizes
 # print(f'{root.geometry()=}')
-total_ht = canv_1.winfo_height() + caption.winfo_height() + open_button.winfo_height() + ui_fr.winfo_height() + btnq.winfo_height()
+
 # print(f'{total_ht=}')
 # total_wd = max(lab.winfo_width(), canv_dyn1.winfo_width(), ui_fr.winfo_width())
-total_wd = max(canv_1.winfo_width(), ui_fr.winfo_width())
 # default_dims = f'{total_wd}x{total_ht}'
-
-# END test
-# --------
+# ---------- END test
 
 default_dims = root.geometry()
 

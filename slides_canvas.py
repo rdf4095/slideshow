@@ -152,7 +152,7 @@ def display_to_canvas(canv: object,
     time.sleep(delay_time)
 
     # display any remaining images
-    # TODO: ? streamline this loop
+    # ? can we streamline this loop
     if len(idlist) > 1:
         for n, item in enumerate(image_objects[startnum + 1:], startnum + 1):
             if run_status is True:
@@ -262,7 +262,7 @@ def step_back():
 def read_but1(ev, vp):
     print(f'in read_but1... {ev}')
 
-    # ? what does this do
+    # ? is this needed here
     # cnv_ui.resize_viewport(ev, vp)
 
     canv = ev.widget
@@ -320,7 +320,7 @@ canv_1.bind('<Configure>', lambda ev,
                                   vp=viewport,
                                   f=canv_config_flag: cnv_ui.resize_viewport(ev, vp, f))
 
-canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
+# canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
 
 # test
 canv_1.bind('Enter', set_enter_win)
