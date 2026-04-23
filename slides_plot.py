@@ -20,6 +20,11 @@ history:
             Still developing spacing of these Frames.
 04-13-2026  Debug the approach to displaying lists of files for each show.
             Remove some old code: variables, tests and comments.
+04-14-2026  Remove old code, update some comments.
+04-15-2026  Change display_to_plot() to display_slides().
+            New logic for resuming a paused show: add flag to display_slides.
+04-17-2026  Debug pause/resume when there are multiple shows.
+04-22-2026  Debug restart of the show.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -30,8 +35,6 @@ import tkinter.font as tkfont
 from ttkthemes import ThemedTk
 from PIL import Image
 import matplotlib.pyplot as plt
-# ? needed
-from matplotlib.pyplot import figure
 
 # ? attempt to retain focus; what does this do to the pause/resume
 plt.rcParams["figure.raise_window"]=False
@@ -44,20 +47,21 @@ root = ThemedTk()
 root.resizable(True, True)
 root.title("canvas, ttk, pack")
 
+# ? can all of these vars be moved below the function defs
 delay_time = 3
 
 helv12 = tkfont.Font(family='Helvetica', size=12)
 helv12b = tkfont.Font(family='Helvetica', size=12, weight='bold')
 
 # which of these is necessary?
-canv_config_flag = False
+# canv_config_flag = False
 enter_canvas_flag = False
 leave_canvas_flag = False
 in_window = True
 
 def reset_window_size(canv: object, vp: dict) -> None:
     """Reset the app main window to the global default_dims size."""
-    pass
+    root.geometry(default_dims)
 
 
 def select_image_files(canv: object) -> None:
@@ -90,15 +94,14 @@ def setup_plot(fpath: tuple | str) -> None:
     """
     global image_objects
     global images_opened
-    # global lens_image_objects
     global run_status
     global canv_1
+    global list_frames
 
     # re-init globals
     image_objects = []
     images_opened = []
 
-    # print('in setup_plot')
     if isinstance(fpath, str):
         print('converting path string to tuple...')
         fpath = (fpath,)
@@ -106,13 +109,14 @@ def setup_plot(fpath: tuple | str) -> None:
     # debug
     # Using an explicit number (the 1 in this case), enables us to return to
     # that figure later.
+    # ...or can we find it based on its close event?
     # fig = plt.figure(1, figsize=[9.6, 5.0], clear=True)
 
     # With no figure number specified, a new figure is automatically created.
     existing_figs = plt.get_fignums()    # list
     fig = plt.figure(figsize=[9.6, 5.0], clear=True)
 
-    # ? needed
+    # ?
     # fig.add_callback(on_close())
     fig.canvas.mpl_connect('close_event', on_close)
 
@@ -131,61 +135,61 @@ def setup_plot(fpath: tuple | str) -> None:
         except Exception as e:
             print(f'error opening image: {str(e)}')
 
-        # update spacing for next list, if any
-        # lens_image_objects.append(len(item))
-
-    # new
     num_to_show = len(images_opened)
 
-    # label_ht = 20    # arbitrary
-    # calc_ht = (line_height * num_to_show ) + label_ht
-
-    fr = tk.Frame(canv_1, width=400)#, height=calc_ht)
+    fr = tk.Frame(canv_1, width=400)
     list_label = tk.Label(fr, text=figure_text, background='cyan')
-    list_label.pack(anchor='w')#, pady=5)
+    list_label.pack(anchor='w')
 
-    t1 = tk.Text(fr, height=num_to_show)#, pady=3)#spacing3=2)
-    t1.pack(anchor='w')#, expand=True)
+    t1 = tk.Text(fr, height=num_to_show)
+    t1.pack(anchor='w')
 
-    # display_to_plot(calc_ht, fr, 0)
-    display_to_plot(fr, 0)
+    list_frames.append(fr)
+
+    display_slides(fr, 0)
 
 
-# def display_to_plot(win_height: int,
-#                     fr: object,
-#                     startnum=0) -> None:
-def display_to_plot(fr: object,
-                    startnum=0) -> None:
+def display_slides(fr: object,
+                   startnum=0,
+                   resume=False,
+                   restart=False) -> None:
+    # since this will be used for initial display, and add_to_slides will be
+    # used to resume the paused show, startnum here can be assumed to be 0 (?).
 
+    # need fewer globals, or more parameters, or some other way...
     global image_objects
     global images_opened
+    global images_selected
     global run_status
+    global canv_windows
+    global canv_1
 
-    # h_offset = 6
-    # v_offset = 6
-    # line_height = 30    # 20 + linespacing=2 + linespacing=2
-
-    print('in display_to_plot')
+    print('in display_slides')
+    print(f'    {startnum=}')
     root.focus()
 
-    # t1 = tk.Text(fr, spacing3=2)
-    # t1.pack(anchor='w')#, expand=True)
-
-    # text_win_ht = line_height * len(images_opened) + 5
-
-    # calculate win y-position using the coords of the canvas-window obove.
-    win_y = 2
-    if len(canv_windows) > 0:
-        item = canv_windows[-1]
-        bbox = canv_1.canv.bbox(item)
-        print(f'    {bbox=}')
-        win_y = bbox[3] + 5
-
-    # thiswin = canv_1.canv.create_window(200, win_y, anchor=tk.N, width=400, height=win_height, window=fr)
-    # works best for sizing, if Frame size is correct
-    thiswin = canv_1.canv.create_window(200, win_y, anchor=tk.N, width=400, window=fr)
-    canv_windows.append(thiswin)
+    # print(f'    {resume=}')
     t1 = fr.winfo_children()[1]
+    if restart is True:
+        # print('restart')
+        # print(f'{t1['state']=}')
+        # t1.config(state='normal')
+        # print(f'{t1['state']=}')
+        t1.delete('1.0', 'end')
+    else:
+        if resume is False:
+            win_y = 2
+            if len(canv_windows) > 0:
+                item = canv_windows[-1]
+
+                bbox = canv_1.canv.bbox(item)
+                print(f'    {bbox=}')
+                win_y = bbox[3] + 5
+
+            thiswin = canv_1.canv.create_window(200, win_y, anchor=tk.N, width=400, window=fr)
+            canv_windows.append(thiswin)
+
+    images_selected = []
 
     for n, item in enumerate(image_objects[startnum:], startnum):
         if run_status is True:
@@ -198,17 +202,27 @@ def display_to_plot(fr: object,
             images_selected.append(filename)
 
             item_text = str(n + 1) + ': ' + filename
-            figures = plt.get_fignums()
-            thisname = 'list' + str(figures[-1]) + '_canvas'
+            # figures = plt.get_fignums()
+            # thisname = 'list' + str(figures[-1]) + '_canvas'
+
+            # check for dupe line:
+            # if item_text == t1.get(float(startnum), 'end - 2c'):
+            #     skip insert
+            # END check
 
             t1.insert('end', item_text)
-            # ? should not be necessary to insert a newline
             t1.insert('end', '\n')
 
             plt.title('image ' + item_text)
             plt.pause(3)
         else:
             break
+
+
+# Might not need this (as alternative to display_slides when resuming a paused show.)
+# def add_to_slides(fr: object,
+#                   startnum=0) -> None:
+#     pass
 
 
 def set_delay(var: tk.StringVar) -> None:
@@ -228,7 +242,7 @@ def pause_show(ev):
     run_status = False
 
 
-def resume_show(ev, canv: object) -> None:
+def resume_show(ev) -> None:
     global images_opened
     global images_selected
     global run_status
@@ -238,20 +252,35 @@ def resume_show(ev, canv: object) -> None:
 
     thisnum = 0
 
-    # else:
-
     # get the most recent Frame
-    children = root.winfo_children()
-    frames = [i for i in children if i.__class__ == ttk.Frame]
-
+    # children = root.winfo_children()
+    # frames = [i for i in children if i.__class__ == ttk.Frame]
     thisnum = len(images_selected)
-
-    cfr = frames[0].winfo_children()[-1]
+    print(f'    {len(images_opened)=}')
+    print(f'    {len(images_selected)=}')
+    # cfr = frames[0].winfo_children()[-1]
+    cfr = list_frames[-1]
 
     # print('resume_show:')
     # print(f'    {frames[0]=}, {type(frames[0])=}')
     # print(f'    {cfr=}, {type(cfr)=}')
-    display_to_plot(0, cfr, thisnum)
+    display_slides(cfr, thisnum, resume=True)
+
+
+def restart_slides(canv: object) -> None:
+    # global images_opened
+    # global images_selected
+    global run_status
+
+    print(f'in restart_slides...')
+    children = canv_1.winfo_children()
+    frames = [i for i in children if i.__class__ == tk.Frame]
+    fr = frames[-1]
+
+    run_status = True
+    thisnum = 0
+
+    display_slides(fr, thisnum, restart=True)
 
 
 def step_forward(ev):
@@ -275,48 +304,26 @@ def get_list_display(ev):
 
 def on_close(ev):
     # print(f'in on_close, {ev=}')
+    # _number is used in the default window title, and as a unique number for
+    # the matplotlib figure object.
+    # Although we could access this protected attribute to determine the figure
+    # that was closed, we still need to keep track of the figure number as a
+    # global var so that the corresponding canvas_window can be deleted.
+    # print(f'    {ev.canvas.figure._number=}')
     pass
-
-
-def read_but1(ev, vp):
-    print(f'in read_but1: {ev}')
-
-    # cnv_ui.resize_viewport(ev, vp)
-    canv = ev.widget
-
-    if len(images_opened) == 0:
-        return
-    # ? slow
-    # ...proceed with setting startnum (the zero in this call)
-    thisnum = 0
-    for n, item in enumerate(canv.find_all()):
-        if canv.itemcget(item, "state") == "normal":
-            thisnum = n
-            break  # only one is normal
-
-    # try
-    im = Image.open(images_opened[-1])
-    params = cnv_ui.calc_resize_to_vp(viewport, im)
-    canv.configure(width=params['wid_int'], height=params['ht_int'])
-    canv.update()
-    # END try
-
-    # use_canvas(canv, tuple(images_opened), thisnum)
 
 
 def set_enter_canvas(ev):
     # pass
     enter_canvas_flag = True
-    in_window = True
     root.focus()
-    # print(f'in set_enter_win:\n    {canv_config_flag=}, {enter_canvas_flag=}, {leave_canvas_flag=}')
+    # print(f'in set_enter_canvas:\n    {enter_canvas_flag=}, {leave_canvas_flag=}')
 
 
 def set_leave_canvas(ev):
     # pass
     leave_canvas_flag = True
-    in_window = False
-    # print(f'in set_leave_win:\n    {canv_config_flag=}, {enter_canvas_flag=}, {leave_canvas_flag=}')
+    # print(f'in set_leave_canvas:\n    {enter_canvas_flag=}, {leave_canvas_flag=}')
 
 
 # default_dims = "400x523+16+18"
@@ -325,13 +332,15 @@ style2 = sttk.create_styles()
 
 viewport = {'w': 400, 'h': 300, 'gutter': 10}
 my_pady = 10
-# previous_ht = 0
 run_status=True
+
+# ? are all 3 of these lists necessary
 images_selected = []
 images_opened = []
 image_objects = []
-# lens_image_objects = []
+
 canv_windows = []
+list_frames = []
 
 
 canv_1 = sel.CanvasFrame(root,
@@ -341,14 +350,9 @@ canv_1 = sel.CanvasFrame(root,
                          stick='nsew')
 canvas = canv_1.canv
 
-# try, instead of canvas with windows/frames/text_objects
-# scr_win = ttk.PanedWindow()
-
-canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
-
-# works, but what's the purpose?
-canv_1.master.bind('<Enter>', set_enter_canvas)
+# what's the purpose?
 canv_1.master.bind('<Leave>', set_leave_canvas)
+canv_1.master.bind('<Enter>', set_enter_canvas)
 
 # can probably keep this (no need for root.bind...
 # canv_1.master.bind('<Control-Down>',
@@ -361,9 +365,12 @@ canv_1.master.bind('<Leave>', set_leave_canvas)
 root.bind_all('<Control-Down>',
                    lambda ev: pause_show(ev)
                    )
+# root.bind_all('<Control-Up>',
+#                    lambda ev,
+#                           canv=canv_1.canv: resume_show(ev, canv)
+#                    )
 root.bind_all('<Control-Up>',
-                   lambda ev,
-                          canv=canv_1: resume_show(ev, canv)
+                   lambda ev: resume_show(ev)
                    )
 
 textvar = tk.StringVar()
@@ -385,6 +392,11 @@ enter_delay_time = sel.EntryFrame(ui_fr,
                                   var=delay,
                                   callb=lambda var=delay: set_delay(var)
                                   )
+
+restart_show = ttk.Button(ui_fr, text="restart show",
+                          style="MyButton1.TButton",
+                          command = lambda canv=canv_1: restart_slides(canv))
+restart_show.pack(ipadx=5, ipady=0, padx=5, pady=5)
 
 window_reset = ttk.Button(ui_fr, text="reset window size",
                           command=lambda canv=canv_1,
