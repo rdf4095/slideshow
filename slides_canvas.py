@@ -18,6 +18,9 @@ history:
             slides_canvas and slides_plot. Remove window reset option. Remove
             some old code, comments and debug statements.
 04-01-2026  Add restart current slideshow from the beginning.
+07-21-2026  Add conditions to pause/resume. Remove flag for cursor 'in' window.
+07-22-2026  Disable mouse-button-1 in the canvas (read_but1) until we think of
+            a use for it. More efficient calc of total UI height.
 """
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -41,11 +44,7 @@ delay_time = 3
 helv12 = tkfont.Font(family='Helvetica', size=12)
 helv12b = tkfont.Font(family='Helvetica', size=12, weight='bold')
 
-# test
 canv_config_flag = False
-enter_win_flag = False
-leave_win_flag = False
-# END test
 
 def select_image_file(canv: object) -> None:
     if run_status is True:
@@ -57,7 +56,7 @@ def select_image_file(canv: object) -> None:
                                                 )
         if file_path:
             add_image(canv, file_path)
-        # twindow_reset doesn't exist anymore, but do we need to do a focus_set?
+        # do we need this?
         # window_reset.focus_set()
 
 
@@ -74,7 +73,7 @@ def use_canvas(canv: object,
 
     Calls:
         prep_canvas
-        display_to_canvas
+        display_slides
     """
     # if the last image should persist, enable this line:
     global im_tk
@@ -101,7 +100,7 @@ def use_canvas(canv: object,
 
     prep_canvas(canv, startnum)
 
-    display_to_canvas(canv, fpath, startnum)
+    display_slides(canv, fpath, startnum)
 
 
 def prep_canvas(canv: object, startnum: int) -> None:
@@ -125,10 +124,10 @@ def prep_canvas(canv: object, startnum: int) -> None:
         images_selected.append(fname)
 
 
-def display_to_canvas(canv: object,
-                      pathlist: list,
-                      startnum: int
-                      ) -> None:
+def display_slides(canv: object,
+                   pathlist: list,
+                   startnum: int
+                   ) -> None:
     """Display a list of images to a Canvas, one at a time.
 
     Uses these module variables:
@@ -139,6 +138,8 @@ def display_to_canvas(canv: object,
         delay_time
     """
     # display first image
+    print('in display_slides...')
+
     idlist = canv.find_all()
     for n, item in enumerate(idlist):
         canv.itemconfigure(item, state=tk.HIDDEN)
@@ -147,12 +148,11 @@ def display_to_canvas(canv: object,
     fname = images_selected[startnum]
     lab = str(startnum + 1) + ' of ' + str(len(pathlist)) + ': ' + fname
     textvar.set(lab)
-
     canv.update()
+
     time.sleep(delay_time)
 
     # display any remaining images
-    # ? can we streamline this loop
     if len(idlist) > 1:
         for n, item in enumerate(image_objects[startnum + 1:], startnum + 1):
             if run_status is True:
@@ -163,18 +163,11 @@ def display_to_canvas(canv: object,
                 fname = images_selected[n]
                 lab = str(n + 1) + ' of ' + str(len(pathlist)) + ': ' + fname
                 textvar.set(lab)
-
                 canv.update()
+
                 time.sleep(delay_time)
             else:
                 break
-
-
-# def add_text(container: object,
-#              line: str,
-#              xy: tuple) -> None:
-#     container.create_text(xy[0], xy[1], anchor='w', font='helv12', text=line)
-#     container.configure(scrollregion=container.bbox("all"))
 
 
 def add_image(canv: object, fpath: tuple | str) -> None:
@@ -195,10 +188,12 @@ def pause_show(ev):
     """
     global run_status
 
-    run_status = False
     # print(f'in pause_show')
-    # print(f'    images shown: {len(images_selected)}, last: {images_selected[-1]}')
 
+    if len(images_opened) > 0:
+        run_status = False
+
+    # print(f'    images shown: {len(images_selected)}, last: {images_selected[-1]}')
     # files = [i.split('/')[-1] for i in images_opened]
     # print(f'    {files=}')
     # print(f'    {len(image_objects)=}')
@@ -206,7 +201,6 @@ def pause_show(ev):
 
 def resume_show(ev, canv: object) -> None:
     global images_opened
-    global images_selected
     global run_status
 
     run_status = True
@@ -218,11 +212,11 @@ def resume_show(ev, canv: object) -> None:
     for n, item in enumerate(canv.find_all()):
         if canv.itemcget(item, "state") == "normal":
             thisnum = n + 1
+            # print(f'    {thisnum=}, {len(images_opened)}')
             break    # only one is normal
 
-    # TODO: thisnum won't work if the show was paused on the last image (there is no n + 1)
-    #       We need extra variables for slide numbers (total, current, etc.)
-    display_to_canvas(canv, tuple(images_opened), thisnum)
+    if thisnum < len(images_opened):
+        display_slides(canv, tuple(images_opened), thisnum)
 
 
 # def restart_slides(ev, canv: object) -> None:
@@ -233,7 +227,7 @@ def restart_slides(canv: object) -> None:
 
     run_status = True
     thisnum = 0
-    display_to_canvas(canv, tuple(images_opened), thisnum)
+    display_slides(canv, tuple(images_opened), thisnum)
 
 
 def step_forward():
@@ -257,44 +251,27 @@ def step_back():
 #     pass
 
 
-# works with the canvas, but should it be viewport
-# ? what can we do with this. It may have been an attempt to pause the show.
-def read_but1(ev, vp):
-    print(f'in read_but1... {ev}')
-
-    # ? is this needed here
-    # cnv_ui.resize_viewport(ev, vp)
-
-    canv = ev.widget
-
-    if len(images_opened) == 0:
-        return
-    # ? slow
-    # ...proceed with setting startnum (the zero in this call)
-    thisnum = 0
-    for n, item in enumerate(canv.find_all()):
-        if canv.itemcget(item, "state") == "normal":
-            thisnum = n
-            break  # there should be only one 'normal'
-
-    # try
-    im = Image.open(images_opened[-1])
-    params = cnv_ui.calc_resize_to_vp(viewport, im)
-    canv.configure(width=params['wid_int'], height=params['ht_int'])
-    canv.update()
-    # END try
-
-    # use_canvas(canv, tuple(images_opened), thisnum)
-
-
-def set_enter_win():
-    enter_win_flag = True
-    print(f'in set_enter_win:\n    {canv_config_flag=}, {enter_win_flag=}, {leave_win_flag=}')
-
-
-def set_leave_win():
-    leave_win_flag = True
-    print(f'in set_leave_win:\n    {canv_config_flag=}, {enter_win_flag=}, {leave_win_flag=}')
+# NOT USED
+# def read_but1(ev, vp):
+#     canv = ev.widget
+#
+#     if len(images_opened) == 0:
+#         return
+#     # ? slow
+#     # ...proceed with setting startnum (the zero in this call)
+#     thisnum = 0
+#     for n, item in enumerate(canv.find_all()):
+#         # print(f'    {n}, {canv.itemcget(item, "state")}')
+#         if canv.itemcget(item, "state") == "normal":
+#             thisnum = n
+#             break  # there should be only one 'normal'
+#
+#     im = Image.open(images_opened[-1])
+#     params = cnv_ui.calc_resize_to_vp(viewport, im)
+#     canv.configure(width=params['wid_int'], height=params['ht_int'])
+#     canv.update()
+#
+#     use_canvas(canv, tuple(images_opened), thisnum)
 
 
 # default_dims = "400x523+16+18"
@@ -313,7 +290,8 @@ canv_1 = tk.Canvas(root,
                    width=viewport['w'],
                    height=viewport['h'],
                    highlightthickness=0,
-                   background='green')
+                   background='green'
+                   )
 canv_1.pack(fill='both', expand=True)
 canv_1.configure(width=viewport['w'], height=viewport['h'])
 canv_1.bind('<Configure>', lambda ev,
@@ -321,11 +299,6 @@ canv_1.bind('<Configure>', lambda ev,
                                   f=canv_config_flag: cnv_ui.resize_viewport(ev, vp, f))
 
 # canv_1.bind('<Button-1>', lambda ev, vp=viewport: read_but1(ev, vp))
-
-# test
-canv_1.bind('Enter', set_enter_win)
-canv_1.bind('Leave', set_leave_win)
-# END test
 
 canv_1.master.bind('<Control-Down>',
                    lambda ev: pause_show(ev)
@@ -335,11 +308,11 @@ canv_1.master.bind('<Control-Up>',
                           canv=canv_1: resume_show(ev, canv)
                    )
 
-report = ttk.Frame(root)
-report.pack(fill='both', expand=True)
+# report = ttk.Frame(root)
+# report.pack(fill='both', expand=True)
 
 textvar = tk.StringVar()
-caption = ttk.Entry(root, justify='center', textvariable=textvar)
+caption = ttk.Entry(root, state='readonly', justify='center', textvariable=textvar)
 caption.pack(fill='x', expand=True)
 caption.update()
 
@@ -358,9 +331,11 @@ enter_delay_time = sel.EntryFrame(ui_fr,
                                   callb=lambda var=delay: set_delay(var)
                                   )
 
-restart_show = ttk.Button(ui_fr, text="restart slides",
+restart_show = ttk.Button(ui_fr,
+                          text="restart show",
                           command=lambda canv=canv_1: restart_slides(canv),
-                          style="MyButton1.TButton")
+                          style="MyButton1.TButton"
+                          )
 restart_show.pack(ipadx=5, ipady=0, padx=5, pady=5)
 
 ui_fr.pack(padx=5, pady=5)
@@ -369,26 +344,36 @@ ui_fr.pack(padx=5, pady=5)
 btnq = ttk.Button(root,
                   text="Quit",
                   command=root.quit,
-                  style="MyButton1.TButton")
+                  style="MyButton1.TButton"
+                  )
 btnq.pack(side="top", pady=my_pady)
 btnq.update()
 
 # show some layout dimensions
 # ----
-print(f'canv_1 h,w: {canv_1.winfo_height()}, {canv_1.winfo_width()}')
-print(f'ui_fr h,w: {ui_fr.winfo_height()}, {ui_fr.winfo_width()}')
+# print(f'canv_1 h,w: {canv_1.winfo_height()}, {canv_1.winfo_width()}')
+# print(f'ui_fr h,w: {ui_fr.winfo_height()}, {ui_fr.winfo_width()}')
 
 # update widget sizes
-print(f'{root.geometry()=}')
-total_ht = canv_1.winfo_height() + caption.winfo_height() + open_button.winfo_height() + ui_fr.winfo_height() + btnq.winfo_height()
-total_wd = max(canv_1.winfo_width(), ui_fr.winfo_width())
-print(f'{total_ht=}, {total_wd=}')
+# pad_height = (my_pady * 4) + (5 * 2)
+# total_ht = (canv_1.winfo_height() + caption.winfo_height() + open_button.winfo_height() +
+#             ui_fr.winfo_height() + btnq.winfo_height()
+#             )
+widgets = [canv_1, caption, open_button, ui_fr, btnq]
+total_ht = 0
+for wid in widgets:
+    total_ht += (wid.winfo_height() + wid.pack_info()['pady'] * 2)
 
+total_wd = max(canv_1.winfo_width(), ui_fr.winfo_width())
+
+# print(f'{ui_fr.winfo_height()}, {ui_fr.winfo_reqheight()}')
+print(f'{total_ht=}, {total_wd=}')
+# print(f'{ui_fr.pack_info()['pady']}')
 # default_dims = f'{total_wd}x{total_ht}'
 default_dims = root.geometry()
 
 # root.minsize(total_wd, total_ht)
-root.minsize(400, 474)
+root.minsize(400, 504)
 print(f'{root.geometry()=}')
 
 if __name__ == "__main__":
